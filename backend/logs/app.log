@@ -1,0 +1,2 @@
+2025-06-15 20:30:39.959 | INFO     | app.main:startup_event:29 - Starting Speech to Text API
+2025-06-15 20:30:44.304 | INFO     | app.main:shutdown_event:33 - Shutting down Speech to Text API

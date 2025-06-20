@@ -4,9 +4,11 @@ from ..services.speech_service import SpeechService, SpeechServiceFactory
 from ..services.gemini_service import GeminiService, GeminiServiceFactory
 from ..services.gemini_audio_service import GeminiAudioService, GeminiAudioServiceFactory
 from ..services.text2speech_service import TextToSpeechService, TextToSpeechServiceFactory
+from ..services.session_manager import SessionManagerService, SessionManagerServiceFactory
 from ..config.settings import Settings, get_settings
 import tempfile
 import os
+import base64
 
 router = APIRouter()
 
@@ -52,11 +54,27 @@ async def transcribe_audio(
             detail=f"Error processing audio file: {str(e)}"
         ) 
     
-@router.post("/gemini_audio")
+@router.get("/gemini_audio")
+async def create_session(
+    session_manager_service: SessionManagerService = Depends(SessionManagerServiceFactory.create)
+):
+    """
+    新しいセッションを作成し、セッションIDを返すエンドポイント
+    
+    Returns:
+        dict: セッションIDを含むレスポンス
+    """
+    session_id = session_manager_service.create_session()
+    return {"session_id": session_id}
+
+    
+@router.post("/gemini_audio/{session_id}")
 async def gemini_audio(
+    session_id: str,
     audio_file: UploadFile = File(...),
     gemini_audio_service: GeminiAudioService = Depends(GeminiAudioServiceFactory.create),
     text_to_speech_service: TextToSpeechService = Depends(TextToSpeechServiceFactory.create),
+    session_manager_service: SessionManagerService = Depends(SessionManagerServiceFactory.create),
     settings: Settings = Depends(get_settings)
 ):
     """
@@ -84,16 +102,23 @@ async def gemini_audio(
         try:
             # 音声認識の実行
             gemini_response = gemini_audio_service.generate_text(
-                audio_content=content
+                audio_content=content,
+                session_id=session_id,
+                session_manager=session_manager_service
             )
 
-            # text_to_speech_service.text_to_speech(
-            #     text=gemini_response[0].response,
-            #     language_code=settings.LANGUAGE_CODE
-            # )
+            # テキストを音声に変換
+            audio_content = text_to_speech_service.text_to_speech(
+                text=gemini_response[0].response,
+                language_code=settings.LANGUAGE_CODE
+            )
+
+            # Base64エンコード
+            audio_base64 = base64.b64encode(audio_content).decode('utf-8')
 
             return {
-                "gemini_response": gemini_response
+                "gemini_response": gemini_response,
+                "audio_content": audio_base64
             }
 
         finally:
@@ -106,3 +131,11 @@ async def gemini_audio(
             status_code=500,
             detail=f"Error processing audio file: {str(e)}"
         ) 
+
+@router.post("/finish_session/{session_id}")
+async def finish_session(
+    session_id: str,
+    session_manager_service: SessionManagerService = Depends(SessionManagerServiceFactory.create)
+):
+    session_manager_service.delete_session(session_id)
+    return {"message": "Session finished"}

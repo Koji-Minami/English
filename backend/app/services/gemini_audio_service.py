@@ -2,9 +2,12 @@ from google import genai
 from google.genai import types
 from app.config.settings import get_settings
 from app.prompts.audio_prompts import AudioPrompt
+from app.services.session_manager import SessionManagerService
 from loguru import logger
 from pydantic import BaseModel
 import json
+from fastapi import Depends 
+
 
 class ResponseSchema(BaseModel):
     transcription: str
@@ -59,11 +62,11 @@ class GeminiAudioService:
         # Gemini APIクライアントの初期化
         self.client = genai.Client(api_key=get_settings().GEMINI_API_KEY)
         self.model_name = get_settings().GEMINI_MODEL_NAME
-        
+            
         # プロンプトの初期化
         self.prompt = AudioPrompt()
 
-    def generate_text(self, audio_content: bytes):
+    def generate_text(self, audio_content: bytes, session_id: str, session_manager: SessionManagerService):
         """
         音声データからテキストを生成するメソッド
         
@@ -82,6 +85,8 @@ class GeminiAudioService:
             raise ValueError("Empty audio data")
         
         try:
+            history = session_manager.get_history(session_id)
+            print(history)
             # プロンプトの取得
             prompt = self.prompt.format()
             
@@ -90,6 +95,7 @@ class GeminiAudioService:
                 model=self.model_name,
                 contents=[
                     prompt,
+                    str(history),
                     types.Part.from_bytes(data=audio_content, mime_type='audio/wav')
                 ],
                 config={
@@ -98,7 +104,9 @@ class GeminiAudioService:
                 }
             )
             response_json: list[ResponseSchema] = response.parsed
-            print(response_json)
+            conversation = [f'"user":{response_json[0].transcription}', 
+                            f'"model":{response_json[0].response}']
+            session_manager.add_to_history(session_id, conversation)
             return response_json
             
         except Exception as e:
