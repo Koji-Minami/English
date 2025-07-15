@@ -1,7 +1,7 @@
 from google import genai
 from google.genai import types
 from app.config.settings import get_settings
-from app.prompts.audio_prompts import AudioPrompt, AudioImmediatePrompt, AudioAnalysisPrompt
+from app.prompts.audio_prompts import AudioPrompt, AudioImmediatePrompt, AudioAnalysisPrompt, TranscriptAnalysisPrompt
 from app.services.session_manager import SessionManagerService
 from loguru import logger
 from pydantic import BaseModel
@@ -24,6 +24,13 @@ class AnalysisResponseSchema(BaseModel):
     speechflaws: str
     nuanceinquiry: list
     alternativeexpressions: list
+
+class AudioAnalysisResponseSchema(BaseModel):
+    advice: str
+    speechflaws: str
+    nuanceinquiry: list
+    alternativeexpressions: list
+    suggestion: str
 
 # class ResponseSchema(BaseModel):
 #     transcription: str
@@ -75,7 +82,8 @@ class GeminiAudioService:
         # プロンプトの初期化
         self.prompt = AudioPrompt()
         self.immediate_prompt = AudioImmediatePrompt()
-        self.analysis_prompt = AudioAnalysisPrompt()
+        self.transcript_analysis_prompt = TranscriptAnalysisPrompt()
+        self.audio_analysis_prompt = AudioAnalysisPrompt()
 
     def generate_text(self, audio_content: bytes, session_id: str, session_manager: SessionManagerService):
         """
@@ -204,7 +212,7 @@ class GeminiAudioService:
         
         try:
             # プロンプトの取得
-            prompt = self.analysis_prompt.format(transcription=transcription)
+            prompt = self.transcript_analysis_prompt.format(transcription=transcription)
             
             # Gemini APIにプロンプトを送信
             response = self.client.models.generate_content(
@@ -261,6 +269,40 @@ class GeminiAudioService:
                     "alternativeexpressions": []
                 }
             )
+
+    async def analyze_audio_background (self, audio_content: bytes, session_id: str, session_manager: SessionManagerService):
+        """
+        バックグラウンドで音声データを分析するメソッド
+        """
+        # 入力値のバリデーション
+        if not audio_content:
+            raise ValueError("Empty audio data")
+        
+        try:
+
+            prompt = self.audio_analysis_prompt.format()
+            
+            # Gemini APIに音声データとプロンプトを送信
+            response = self.client.models.generate_content(
+                model=self.model_name,
+                contents=[
+                    prompt, 
+                    types.Part.from_bytes(data=audio_content, mime_type='audio/wav')
+                ],
+                config={
+                    "response_mime_type": "application/json",
+                    "response_schema": list[AudioAnalysisResponseSchema]
+                }
+            )
+            response_json: list[AudioAnalysisResponseSchema] = response.parsed
+            print(response_json[0])
+            
+            return response_json[0]
+            
+        except Exception as e:
+            logger.error(f"Error generating immediate response: {e}")
+            raise e
+
 
 class GeminiAudioServiceFactory:
     """

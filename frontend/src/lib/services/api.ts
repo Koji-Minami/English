@@ -25,6 +25,7 @@ export class AudioService {
     const response = await fetch(`${API_BASE_URL}/gemini_audio`, {
       method: 'GET',
     });
+    console.log(response);
     
     if (!response.ok) {
       throw new Error(`Failed to create session: ${response.statusText}`);

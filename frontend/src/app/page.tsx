@@ -19,6 +19,7 @@ export default function Home() {
   const [webpageUrl, setWebpageUrl] = useState('');
   const [isAddingWebpage, setIsAddingWebpage] = useState(false);
   const [webpageStatus, setWebpageStatus] = useState<string | null>(null);
+  const [conversationId, setConversationId] = useState<number | null>(null);
   
   interface NuanceItem {
     alternative: string;
@@ -164,6 +165,16 @@ export default function Home() {
             } text-white transition-colors`}
           >
             {sessionId ? 'Now Conversation' : 'Start Conversation'}
+          </button>
+          <button
+            onClick={createSession}
+            className={`px-6 py-3 rounded-full font-semibold ${
+              sessionId
+                ? 'bg-red-500 hover:bg-red-600'
+                : 'disabled:'
+            } text-white transition-colors`}
+          >
+            "finish conversation"
           </button>
           
           {/* WebページURL入力フォーム */}

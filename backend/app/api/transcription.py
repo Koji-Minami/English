@@ -146,6 +146,7 @@ async def add_webpage_to_session(
 @router.post("/gemini_audio/{session_id}")
 async def gemini_audio(
     session_id: str,
+    conversation_id: str,
     background_tasks: BackgroundTasks,
     audio_file: UploadFile = File(...),
     gemini_audio_service: GeminiAudioService = Depends(GeminiAudioServiceFactory.create),
@@ -191,6 +192,13 @@ async def gemini_audio(
             background_tasks.add_task(
                 gemini_audio_service.analyze_transcription_background,
                 transcription=immediate_response.transcription,
+                session_id=session_id,
+                session_manager=session_manager_service
+            )
+
+            background_tasks.add_task(
+                gemini_audio_service.analyze_audio_background,
+                audio_content=content,
                 session_id=session_id,
                 session_manager=session_manager_service
             )
