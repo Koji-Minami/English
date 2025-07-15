@@ -146,7 +146,7 @@ async def add_webpage_to_session(
 @router.post("/gemini_audio/{session_id}")
 async def gemini_audio(
     session_id: str,
-    conversation_id: str,
+    # conversation_id: str,
     background_tasks: BackgroundTasks,
     audio_file: UploadFile = File(...),
     gemini_audio_service: GeminiAudioService = Depends(GeminiAudioServiceFactory.create),

@@ -32,40 +32,6 @@ class AudioAnalysisResponseSchema(BaseModel):
     alternativeexpressions: list
     suggestion: str
 
-# class ResponseSchema(BaseModel):
-#     transcription: str
-#     response: str
-#     feedback: str
-
-#     def _parse_json_field(self, field: str, key: str = "text") -> str:
-#         """
-#         JSONフィールドをパースする共通メソッド
-        
-#         Args:
-#             field: パースするフィールド名
-#             key: 取得するJSONのキー
-            
-#         Returns:
-#             str: パースされたテキスト
-#         """
-#         try:
-#             value = getattr(self, field)
-#             return json.loads(value)[key]
-#         except (json.JSONDecodeError, KeyError, AttributeError):
-#             return value  # フォールバック: 生のテキストを返す
-
-#     @property
-#     def transcription_text(self) -> str:
-#         return self._parse_json_field("transcription")
-
-#     @property
-#     def response_text(self) -> str:
-#         return self._parse_json_field("response")
-
-#     @property
-#     def feedback_text(self) -> str:
-#         return self._parse_json_field("feedback")
-
 class GeminiAudioService:
     """
     Gemini APIを使用して音声データを処理するサービス
@@ -192,7 +158,7 @@ class GeminiAudioService:
             logger.error(f"Error generating immediate response: {e}")
             raise e
 
-    def generate_analysis(self, transcription: str):
+    async def generate_transcript_analysis(self, transcription: str):
         """
         書き起こしテキストから文法分析を生成するメソッド
         
@@ -247,7 +213,7 @@ class GeminiAudioService:
         """
         try:
             logger.info(f"Starting background analysis for session: {session_id}")
-            analysis_result = self.generate_analysis(transcription)
+            analysis_result = await self.generate_transcript_analysis(transcription)
             
             # 分析結果をセッションに保存
             session_manager.save_analysis_result(
@@ -270,7 +236,7 @@ class GeminiAudioService:
                 }
             )
 
-    async def analyze_audio_background (self, audio_content: bytes, session_id: str, session_manager: SessionManagerService):
+    async def generate_audio_analysis(self, audio_content: bytes):
         """
         バックグラウンドで音声データを分析するメソッド
         """
@@ -302,6 +268,42 @@ class GeminiAudioService:
         except Exception as e:
             logger.error(f"Error generating immediate response: {e}")
             raise e
+    async def analyze_audio_background (self, audio_content: bytes, session_id: str, session_manager: SessionManagerService):
+        """
+        バックグラウンドで文法分析を実行するメソッド
+        
+        Args:
+            transcription (str): 分析対象の書き起こしテキスト
+            session_id (str): セッションID
+            session_manager (SessionManagerService): セッション管理サービス
+        """
+        try:
+            logger.info(f"Starting background analysis for session: {session_id}")
+            analysis_result = await self.generate_audio_analysis(audio_content)
+            
+            # 分析結果をセッションに保存
+            session_manager.save_analysis_result(
+                session_id=session_id,
+                transcription="",  # 音声分析なので空文字列
+                analysis_result=analysis_result.dict()
+            )
+            logger.info(f"Completed background analysis for session: {session_id}")
+            
+        except Exception as e:
+            logger.error(f"Error in background analysis for session {session_id}: {str(e)}")
+            # エラーが発生した場合も空の結果を保存
+            session_manager.save_analysis_result(
+                session_id=session_id,
+                transcription="",
+                analysis_result={
+                    "advice": "",
+                    "speechflaws": "",
+                    "nuanceinquiry": [],
+                    "alternativeexpressions": [],
+                    "suggestion": ""
+                }
+            )
+        
 
 
 class GeminiAudioServiceFactory:

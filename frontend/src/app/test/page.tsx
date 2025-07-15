@@ -3,6 +3,9 @@
 import { useState, useEffect, useRef } from "react";
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
+import { AudioService } from '@/lib/services/api';
+import { AudioRecorder, createAudioUrlFromBase64 } from '@/lib/services/audioRecorder';
+import { useKeyboardControls } from '@/lib/hooks/useKeyboardControls';
 
 export default function Component() {
 
@@ -11,34 +14,158 @@ export default function Component() {
     const [error, setError] = useState<string | null>(null);
     const [sessionId, setSessionId] = useState<string | null>(null);
     const [talkHistory, setTalkHistory] = useState(["aaaa","bbbb","cccc","dddd","eeee"]);
-    const [conversationHistory, setConversationHistory] = useState([
-        {
-            id: 1,
-            isUser: true,
-            content: "aaaa",
-        },
-        {
-            id: 2,
-            isUser: false,
-            content: "bbbb",
-        },
-        {
-            id: 3,
-            isUser: true,
-            content: "cccc",
-        },
-        {
-            id: 4,
-            isUser: false,
-            content: "dddd",
-        }
-    ]);
+    const [conversationHistory, setConversationHistory] = useState<Array<{id: number, isUser: boolean, content: string}>>([]);
     const [adviceForExpression, setAdviceForExpression] = useState("aaa");
     const [alternativeExpressions, setAlternativeExpressions] = useState(['aaa','bbb','ccc']);
     const [usefulIdioms, setUsefulIdioms] = useState(['aaa','bbb','ccc']);
     const [isInvisible, setIsInvisible] = useState(false);
+    const audioRecorderRef = useRef<AudioRecorder | null>(null);
+    const audioRef = useRef<HTMLAudioElement | null>(null);
+    const [audioUrl, setAudioUrl] = useState<string | null>(null);
+    const [isRecording, setIsRecording] = useState(false);
+    const [webpageUrl, setWebpageUrl] = useState('');
+    const [isAddingWebpage, setIsAddingWebpage] = useState(false);
+    const [webpageStatus, setWebpageStatus] = useState<string | null>(null);
+    const [transcript, setTranscript] = useState<string>('');
+    const [response, setResponse] = useState<string>('');
+    
+
+  // 音声URLが変更されたら自動再生
+  useEffect(() => {
+    if (audioUrl && audioRef.current) {
+      audioRef.current.play().catch(error => {
+        console.error('Error playing audio:', error);
+      });
+    }
+  }, [audioUrl]);
+
+  // コンポーネントのクリーンアップ
+  useEffect(() => {
+    return () => {
+      if (audioUrl) {
+        URL.revokeObjectURL(audioUrl);
+      }
+    };
+  }, [audioUrl]);
+
+  const createSession = async () => {
+    try {
+      const data = await AudioService.createSession();
+      setSessionId(data.session_id);
+      setWebpageStatus(null); // セッション作成時にステータスをリセット
+    } catch (error) {
+      console.error('Error creating session:', error);
+      setError('セッションの作成に失敗しました');
+    }
+  };
+
+  const addWebpageToSession = async () => {
+    if (!sessionId || !webpageUrl.trim()) {
+      setWebpageStatus('セッションIDまたはURLが無効です');
+      return;
+    }
+
+    setIsAddingWebpage(true);
+    setWebpageStatus('Webページを読み込み中...');
+
+    try {
+      const data = await AudioService.addWebpageToSession(sessionId, webpageUrl);
+      setWebpageStatus(`✅ ${data.webpage_data.title} を追加しました`);
+      setWebpageUrl(''); // 入力フィールドをクリア
+    } catch (error) {
+      console.error('Error adding webpage:', error);
+      setWebpageStatus(`❌ エラー: ${error instanceof Error ? error.message : 'Webページの追加に失敗しました'}`);
+    } finally {
+      setIsAddingWebpage(false);
+    }
+  };
+
+  const startRecording = async () => {
+    try {
+      if (!audioRecorderRef.current) {
+        audioRecorderRef.current = new AudioRecorder();
+      }
+      
+      await audioRecorderRef.current.startRecording();
+      setIsRecording(true);
+    } catch (error) {
+      console.error('Error starting recording:', error);
+      setError('録音の開始に失敗しました');
+    }
+  };
+
+  const stopRecording = async () => {
+    if (!audioRecorderRef.current || !isRecording) return;
+
+    try {
+      const audioBlob = await audioRecorderRef.current.stopRecording();
+      setIsRecording(false);
+
+      if (!sessionId) {
+        setError('セッションIDがありません');
+        return;
+      }
+
+      const data = await AudioService.processAudio(sessionId, audioBlob);
+      
+      setTranscript(data.transcription);
+      setResponse(data.response);
+      setConversationHistory([...conversationHistoryTest, {
+        id: conversationHistory.length + 1,
+        isUser: true,
+        content: data.transcription,
+      },{
+        id: conversationHistory.length + 2,
+        isUser: false,
+        content: data.response,
+      }]);
+
+      console.log(conversationHistory);
+      
+
+      // 音声データをBase64からBlobに変換
+      try {
+        // 既存のURLを解放
+        if (audioUrl) {
+          URL.revokeObjectURL(audioUrl);
+        }
+
+        // 新しい音声URLを設定
+        const newAudioUrl = createAudioUrlFromBase64(data.audio_content);
+        setAudioUrl(newAudioUrl);
+      } catch (error) {
+        console.error('Error decoding audio data:', error);
+      }
+    } catch (error) {
+      console.error('Error processing audio:', error);
+      setError('音声の処理に失敗しました');
+    }
+  };
+
+  // キーボードイベントのハンドリング
+  useKeyboardControls({
+    isRecording,
+    sessionId,
+    onStartRecording: startRecording,
+    onStopRecording: stopRecording,
+  });
+
+  const deleteSession = async () => {
+    try {
+      console.log("delete session");
+      setSessionId(null);
+      setWebpageStatus(null); // セッション作成時にステータスをリセット
+      setConversationHistory([]);
+    } catch (error) {
+      console.error('Error deleting session:', error);
+      setError('セッションの削除に失敗しました');
+    }
+  };
+
   return (
     <div className="flex h-screen bg-gradient-to-br from-slate-100 via-blue-50 to-indigo-100 overflow-hidden">
+      {/* 音声要素（非表示） */}
+      <audio ref={audioRef} src={audioUrl || undefined} controls className="hidden"/>
       {/* 左サイドバー */}
       <div className="w-48 bg-gradient-to-b from-slate-800 to-slate-900 p-4 shadow-xl flex-shrink-0">
         <div className="mb-8">
@@ -74,18 +201,49 @@ export default function Component() {
             Talk Theme: Lorem ipsum dolor sit amet, consectetur
           </h1>
 
-          <div className="flex gap-3">
-            <div className="flex items-center gap-2 bg-white rounded-lg p-3 shadow-md border border-slate-200">
-              <span className="text-slate-700 text-sm font-medium">URL:</span>
-              <Input
-                placeholder="URLを入力してください"
-                className="w-64 border-slate-300 focus:border-blue-500 focus:ring-blue-500"
-              />
-            </div>
-            <Button className="bg-gradient-to-r from-blue-500 to-blue-600 hover:from-blue-600 hover:to-blue-700 text-white shadow-lg hover:shadow-xl transition-all duration-200">
-              Upload
+          {/* セッション開始ボタン */}
+          <div className="mb-4 flex gap-3">
+            <Button 
+              onClick={createSession}
+              disabled={isLoading}
+              className="bg-gradient-to-r from-green-500 to-green-600 hover:from-green-600 hover:to-green-700 text-white shadow-lg hover:shadow-xl transition-all duration-200"
+            >
+              {sessionId ? `ID:${sessionId}` : 'セッションを開始'}
             </Button>
+            <Button 
+              onClick={deleteSession}
+              disabled={isLoading}
+              className={`bg-gradient-to-r from-red-500 to-red-600 hover:from-red-600 hover:to-red-700 text-white shadow-lg hover:shadow-xl transition-all duration-200 ${sessionId ? '' : 'hidden'}`}
+            >
+              {`finish session`}
+            </Button>
+
           </div>
+
+          <div className="flex gap-3">
+              <div className="flex items-center gap-2 bg-white rounded-lg p-3 shadow-md border border-slate-200">
+                <span className="text-slate-700 text-sm font-medium">URL:</span>
+                <Input
+                  value={webpageUrl}
+                  onChange={(e) => setWebpageUrl(e.target.value)}
+                  placeholder="URLを入力してください"
+                  className="w-64 border-slate-300 focus:border-blue-500 focus:ring-blue-500"
+                />
+              </div>
+              <Button 
+                onClick={addWebpageToSession}
+                disabled={!sessionId || isAddingWebpage}
+                className="bg-gradient-to-r from-blue-500 to-blue-600 hover:from-blue-600 hover:to-blue-700 text-white shadow-lg hover:shadow-xl transition-all duration-200"
+              >
+                {isAddingWebpage ? '追加中...' : 'Upload'}
+              </Button>
+            </div>
+            {webpageStatus && (
+              <div className="mt-2 text-sm text-blue-600">
+                {webpageStatus}
+              </div>
+            )}
+
         </div>
 
         {/* 2つのウィンドウを並べる部分 - 残りの高さを全て使用 */}

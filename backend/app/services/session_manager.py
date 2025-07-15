@@ -56,7 +56,10 @@ class SessionManagerService:
         """
         try:
             if session_id in self._analysis_results:
-                self._analysis_results[session_id][transcription] = analysis_result
+                if transcription:
+                    self._analysis_results[session_id][transcription] = analysis_result
+                else:
+                    self._analysis_results[session_id] = analysis_result
                 logger.debug(f"Saved analysis result for session: {session_id}, transcription: {transcription[:50]}...")
         except Exception as e:
             logger.error(f"Failed to save analysis result: {e}")
