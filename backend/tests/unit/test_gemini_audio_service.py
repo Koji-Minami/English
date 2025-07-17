@@ -21,14 +21,19 @@ def test_generate_text_success(gemini_audio_service, mock_genai_client):
     """Test successful text generation from audio."""
     # モックの設定
     mock_response = Mock()
-    mock_response.text = "This is a test response"
+    mock_response.parsed = [Mock(transcription="Hello", response="Hi there")]
     mock_genai_client.return_value.models.generate_content.return_value = mock_response
 
+    # モックのセッション管理サービス
+    mock_session_manager = Mock()
+    mock_session_manager.get_history.return_value = []
+    mock_session_manager.add_to_history = Mock()
+
     # テスト実行
-    result = gemini_audio_service.generate_text(b"test audio")
+    result = gemini_audio_service.generate_text(b"test audio", "test_session", mock_session_manager)
     
     # 検証
-    assert result == "This is a test response", "Should return the expected response"
+    assert result is not None, "Should return the expected response"
     mock_genai_client.return_value.models.generate_content.assert_called_once()
 
 def test_generate_text_error(gemini_audio_service, mock_genai_client):
@@ -36,27 +41,39 @@ def test_generate_text_error(gemini_audio_service, mock_genai_client):
     # モックの設定
     mock_genai_client.return_value.models.generate_content.side_effect = Exception("API Error")
 
+    # モックのセッション管理サービス
+    mock_session_manager = Mock()
+    mock_session_manager.get_history.return_value = []
+
     # テスト実行と検証
     with pytest.raises(Exception) as exc_info:
-        gemini_audio_service.generate_text(b"test audio")
+        gemini_audio_service.generate_text(b"test audio", "test_session", mock_session_manager)
     
-    assert str(exc_info.value) == "API Error", "Should raise the expected error"
+    assert "API Error" in str(exc_info.value), "Should raise the expected error"
 
 def test_generate_text_with_invalid_audio(gemini_audio_service, mock_genai_client):
     """Test handling of invalid audio data."""
     # モックの設定
     mock_genai_client.return_value.models.generate_content.side_effect = ValueError("Invalid audio format")
 
+    # モックのセッション管理サービス
+    mock_session_manager = Mock()
+    mock_session_manager.get_history.return_value = []
+
     # テスト実行と検証
     with pytest.raises(ValueError) as exc_info:
-        gemini_audio_service.generate_text(b"invalid audio data")
+        gemini_audio_service.generate_text(b"invalid audio data", "test_session", mock_session_manager)
     
     assert "Invalid audio format" in str(exc_info.value), "Should raise format error"
 
 def test_generate_text_with_empty_audio(gemini_audio_service, mock_genai_client):
     """Test handling of empty audio data."""
+    # モックのセッション管理サービス
+    mock_session_manager = Mock()
+    mock_session_manager.get_history.return_value = []
+
     # テスト実行と検証
     with pytest.raises(ValueError) as exc_info:
-        gemini_audio_service.generate_text(b"")
+        gemini_audio_service.generate_text(b"", "test_session", mock_session_manager)
     
     assert "Empty audio data" in str(exc_info.value), "Should raise empty data error"

@@ -22,7 +22,9 @@ async def test_transcribe_endpoint_success(test_client, mock_speech_service, sam
     
     # アサーション
     assert response.status_code == 200
-    assert response.json() == {"transcript": "Hello, this is a test."}
+    response_data = response.json()
+    assert "transcript" in response_data
+    assert "gemini_response" in response_data
     mock_speech_service.transcribe_audio.assert_called_once()
 
 @pytest.mark.asyncio

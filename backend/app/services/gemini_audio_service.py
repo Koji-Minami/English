@@ -228,6 +228,7 @@ class GeminiAudioService:
             # エラーが発生した場合も空の結果を保存
             session_manager.save_analysis_result(
                 session_id=session_id,
+                conversation_id='',
                 transcription=transcription,
                 analysis_result={
                     "speechflaws": "",
@@ -268,7 +269,7 @@ class GeminiAudioService:
         except Exception as e:
             logger.error(f"Error generating immediate response: {e}")
             raise e
-    async def analyze_audio_background (self, audio_content: bytes, session_id: str, session_manager: SessionManagerService):
+    async def analyze_audio_background (self, audio_content: bytes, session_id: str, conversation_id: str, session_manager: SessionManagerService):
         """
         バックグラウンドで文法分析を実行するメソッド
         
@@ -284,6 +285,7 @@ class GeminiAudioService:
             # 分析結果をセッションに保存
             session_manager.save_analysis_result(
                 session_id=session_id,
+                conversation_id=conversation_id,
                 transcription="",  # 音声分析なので空文字列
                 analysis_result=analysis_result.dict()
             )

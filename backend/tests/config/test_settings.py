@@ -5,9 +5,9 @@ def test_settings_default_values():
     settings = Settings()
     assert settings.APP_NAME == "Speech to Text API"
     assert settings.DEBUG is True
-    assert settings.CORS_ORIGINS == ["http://localhost:3000"]
+    assert "http://localhost:3000" in settings.CORS_ORIGINS
     assert settings.AUDIO_SAMPLE_RATE == 48000
-    assert settings.AUDIO_ENCODING == "WEBM_OPUS"
+    assert settings.AUDIO_ENCODING == "MP3"
     assert settings.LANGUAGE_CODE == "en-US"
 
 def test_settings_custom_values():

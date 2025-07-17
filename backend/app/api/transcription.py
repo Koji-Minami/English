@@ -1,4 +1,4 @@
-from fastapi import APIRouter, UploadFile, File, Depends, HTTPException, BackgroundTasks, Query
+from fastapi import APIRouter, UploadFile, File, Depends, HTTPException, BackgroundTasks, Query, Form
 from pydantic import BaseModel
 from loguru import logger
 from ..services.speech_service import SpeechService, SpeechServiceFactory
@@ -146,7 +146,6 @@ async def add_webpage_to_session(
 @router.post("/gemini_audio/{session_id}")
 async def gemini_audio(
     session_id: str,
-    # conversation_id: str,
     background_tasks: BackgroundTasks,
     audio_file: UploadFile = File(...),
     gemini_audio_service: GeminiAudioService = Depends(GeminiAudioServiceFactory.create),
@@ -189,17 +188,20 @@ async def gemini_audio(
             )
 
             # バックグラウンドで文法分析を実行
-            background_tasks.add_task(
-                gemini_audio_service.analyze_transcription_background,
-                transcription=immediate_response.transcription,
-                session_id=session_id,
-                session_manager=session_manager_service
-            )
+            # background_tasks.add_task(
+            #     gemini_audio_service.analyze_transcription_background,
+            #     transcription=immediate_response.transcription,
+            #     session_id=session_id,
+            #     session_manager=session_manager_service
+            # )
 
+            current_conversation_id = session_manager_service.get_next_conversation_id(session_id)
+            print(f'current_conversation_id: {current_conversation_id}')
             background_tasks.add_task(
                 gemini_audio_service.analyze_audio_background,
                 audio_content=content,
                 session_id=session_id,
+                conversation_id=current_conversation_id,
                 session_manager=session_manager_service
             )
 
@@ -213,8 +215,14 @@ async def gemini_audio(
             audio_base64 = base64.b64encode(audio_content).decode('utf-8')
 
             return {
-                "transcription": immediate_response.transcription,
-                "response": immediate_response.response,
+                "transcription": {
+                    "id": current_conversation_id,
+                    "content": immediate_response.transcription
+                },
+                "response": {
+                    "id": session_manager_service.get_next_conversation_id(session_id),
+                    "content": immediate_response.response
+                },
                 "audio_content": audio_base64,
                 "analysis_status": "processing"  # 文法分析が進行中であることを示す
             }
@@ -234,7 +242,7 @@ async def gemini_audio(
 async def get_analysis_results(
     session_id: str,
     session_manager_service: SessionManagerService = Depends(SessionManagerServiceFactory.create),
-    transcription: str = Query(None, description="特定の書き起こしテキスト（指定しない場合は全て取得）")
+    conversation_id: str = Query(default="", description="特定の会話ID（指定しない場合は全て取得）")
 ):
     """
     文法分析結果を取得するエンドポイント
@@ -248,9 +256,9 @@ async def get_analysis_results(
         dict: 文法分析結果を含むレスポンス
     """
     try:
-        if transcription:
+        if conversation_id:
             # 特定の書き起こしテキストの分析結果を取得
-            analysis_result = session_manager_service.get_analysis_result(session_id, transcription)
+            analysis_result = session_manager_service.get_analysis_result(session_id, conversation_id)
             if analysis_result is None:
                 return {
                     "status": "not_found",
@@ -262,6 +270,7 @@ async def get_analysis_results(
             }
         else:
             # セッションの全ての分析結果を取得
+            return {"status": "error", "message": "Conversation ID is required"}
             all_results = session_manager_service.get_all_analysis_results(session_id)
             return {
                 "status": "completed",
@@ -349,3 +358,13 @@ async def gemini_audio_legacy(
             status_code=500,
             detail=f"Error processing audio file: {str(e)}"
         )
+    
+
+@router.get("/get_analysis_result/{session_id}/{conversation_id}")
+async def get_analysis_result(
+    session_id: str,
+    conversation_id: str,
+    session_manager_service: SessionManagerService = Depends(SessionManagerServiceFactory.create)
+):
+    analysis_result = session_manager_service.get_analysis_result(session_id, conversation_id)
+    return {"analysis_result": analysis_result}

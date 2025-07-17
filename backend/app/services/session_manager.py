@@ -8,6 +8,7 @@ class SessionManagerService:
     _sessions: Dict[str, List[List[str]]] = {}
     _analysis_results: Dict[str, Dict[str, Any]] = {}
     _webpage_data: Dict[str, Dict[str, str]] = {}  # セッションごとのWebページデータ
+    _conversation_ids: Dict[str, int] = {}
 
     def __new__(cls):
         if cls._instance is None:
@@ -45,40 +46,47 @@ class SessionManagerService:
             logger.error(f"Failed to add to history: {e}")
             raise
 
-    def save_analysis_result(self, session_id: str, transcription: str, analysis_result: Dict[str, Any]) -> None:
+    def save_analysis_result(self, session_id: str, conversation_id: str, transcription: str, analysis_result: Dict[str, Any]) -> None:
         """
         文法分析結果をセッションに保存するメソッド
         
         Args:
             session_id (str): セッションID
+            conversation_id (str): 会話ID
             transcription (str): 書き起こしテキスト
             analysis_result (Dict[str, Any]): 文法分析結果
         """
         try:
             if session_id in self._analysis_results:
-                if transcription:
-                    self._analysis_results[session_id][transcription] = analysis_result
-                else:
-                    self._analysis_results[session_id] = analysis_result
-                logger.debug(f"Saved analysis result for session: {session_id}, transcription: {transcription[:50]}...")
+                # conversation_idをキーとして使用し、transcriptionとanalysis_resultを含む辞書を保存
+                self._analysis_results[session_id][conversation_id] = {
+                    "transcription": transcription,
+                    "analysis_result": analysis_result
+                }
+                logger.debug(f"Saved analysis result for session: {session_id}, conversation_id: {conversation_id}, transcription: {transcription[:50]}...")
+                print(self._analysis_results)
         except Exception as e:
             logger.error(f"Failed to save analysis result: {e}")
             raise
 
-    def get_analysis_result(self, session_id: str, transcription: str) -> Optional[Dict[str, Any]]:
+    def get_analysis_result(self, session_id: str, conversation_id: str) -> Optional[Dict[str, Any]]:
         """
-        指定された書き起こしテキストの文法分析結果を取得するメソッド
+        指定された会話IDの文法分析結果を取得するメソッド
         
         Args:
             session_id (str): セッションID
-            transcription (str): 書き起こしテキスト
+            conversation_id (str): 会話ID
             
         Returns:
             Optional[Dict[str, Any]]: 文法分析結果（存在しない場合はNone）
         """
         try:
             if session_id in self._analysis_results:
-                return self._analysis_results[session_id].get(transcription)
+                conversation_data = self._analysis_results[session_id].get(conversation_id)
+                print(f"conversation_data: {conversation_data}")
+                if conversation_data:
+                    print(f"conversation_data: {conversation_data}")
+                    return conversation_data.get("analysis_result")
             return None
         except Exception as e:
             logger.error(f"Failed to get analysis result: {e}")
@@ -92,7 +100,7 @@ class SessionManagerService:
             session_id (str): セッションID
             
         Returns:
-            Dict[str, Any]: 全ての文法分析結果
+            Dict[str, Any]: 全ての文法分析結果（conversation_idをキーとした辞書）
         """
         try:
             if session_id in self._analysis_results:
@@ -154,11 +162,25 @@ class SessionManagerService:
         except Exception as e:
             logger.error(f"Failed to get webpage data: {e}")
             return None
+        
+    def get_next_conversation_id(self, session_id: str) -> str:
+        try:
+            if session_id not in self._conversation_ids:
+                self._conversation_ids[session_id] = 0
+            self._conversation_ids[session_id] += 1
+            conversation_id = str(self._conversation_ids[session_id])
+            logger.info(f"Generated conversation_id: {conversation_id} for session: {session_id}")
+            return conversation_id
+        except Exception as e:
+            logger.error(f"Failed to get next conversation id: {e}")
+            return None
+
 
 class SessionManagerServiceFactory:
     _instance = None
 
     @classmethod
+
     def create(cls) -> SessionManagerService:
         if cls._instance is None:
             cls._instance = SessionManagerService()

@@ -6,6 +6,10 @@ __pycache__/
 .idea/
 .pytest_cache/
 .pytest_cache/
+.coverage
+backend/run_test.py
+backend/test.json
+test*
 # See https://help.github.com/articles/ignoring-files/ for more about ignoring files.
 
 # dependencies

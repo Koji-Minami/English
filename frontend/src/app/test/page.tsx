@@ -15,9 +15,9 @@ export default function Component() {
     const [sessionId, setSessionId] = useState<string | null>(null);
     const [talkHistory, setTalkHistory] = useState(["aaaa","bbbb","cccc","dddd","eeee"]);
     const [conversationHistory, setConversationHistory] = useState<Array<{id: number, isUser: boolean, content: string}>>([]);
-    const [adviceForExpression, setAdviceForExpression] = useState("aaa");
-    const [alternativeExpressions, setAlternativeExpressions] = useState(['aaa','bbb','ccc']);
-    const [usefulIdioms, setUsefulIdioms] = useState(['aaa','bbb','ccc']);
+    const [adviceForExpression, setAdviceForExpression] = useState("");
+    const [alternativeExpressions, setAlternativeExpressions] = useState<string[]>([]);
+    const [usefulIdioms, setUsefulIdioms] = useState<string[]>([]);
     const [isInvisible, setIsInvisible] = useState(false);
     const audioRecorderRef = useRef<AudioRecorder | null>(null);
     const audioRef = useRef<HTMLAudioElement | null>(null);
@@ -28,6 +28,8 @@ export default function Component() {
     const [webpageStatus, setWebpageStatus] = useState<string | null>(null);
     const [transcript, setTranscript] = useState<string>('');
     const [response, setResponse] = useState<string>('');
+    const [analysisResults, setAnalysisResults] = useState<{[key: string]: any}>({});
+    const [selectedMessageId, setSelectedMessageId] = useState<number | null>(null);
     
 
   // 音声URLが変更されたら自動再生
@@ -108,18 +110,17 @@ export default function Component() {
 
       const data = await AudioService.processAudio(sessionId, audioBlob);
       
-      setTranscript(data.transcription);
-      setResponse(data.response);
-      setConversationHistory([...conversationHistoryTest, {
-        id: conversationHistory.length + 1,
+      setTranscript(data.transcription.content);
+      setResponse(data.response.content);
+      setConversationHistory([...conversationHistory, {
+        id: data.transcription.id,
         isUser: true,
-        content: data.transcription,
+        content: data.transcription.content,
       },{
-        id: conversationHistory.length + 2,
+        id: data.response.id,
         isUser: false,
-        content: data.response,
+        content: data.response.content,
       }]);
-
       console.log(conversationHistory);
       
 
@@ -156,10 +157,42 @@ export default function Component() {
       setSessionId(null);
       setWebpageStatus(null); // セッション作成時にステータスをリセット
       setConversationHistory([]);
+      setAnalysisResults({});
+      setSelectedMessageId(null);
     } catch (error) {
       console.error('Error deleting session:', error);
       setError('セッションの削除に失敗しました');
     }
+  };
+
+  const handleMessageClick = async (messageId: number, isUser: boolean) => {
+    if (!isUser || !sessionId) return;
+    
+    try {
+      setSelectedMessageId(messageId);
+      console.log(messageId);
+      const result = await AudioService.getAnalysisResult(sessionId, messageId.toString());
+      console.log(result);
+      
+      // 分析結果を保存
+      setAnalysisResults(result);
+      
+      // 分析結果を表示用のstateに設定
+      setAdviceForExpression(result.analysis_result.advice || '');
+      setAlternativeExpressions(
+        result.analysis_result.alternativeexpressions?.map((expr: [string, string]) => expr[0]) || []
+      );
+      setUsefulIdioms(
+        result.analysis_result.suggestion || []
+      );
+    } catch (error) {
+      console.error('Error getting analysis result:', error);
+      setError('分析結果の取得に失敗しました');
+    }
+  };
+
+  const toggleInvisibleMode = () => {
+    setIsInvisible(!isInvisible);
   };
 
   return (
@@ -255,49 +288,76 @@ export default function Component() {
               <Button
                 variant="outline"
                 size="sm"
-                className="bg-slate-100 border-slate-300 text-slate-700 hover:bg-slate-200 transition-colors duration-200"
+                onClick={toggleInvisibleMode}
+                className={`transition-colors duration-200 ${
+                  isInvisible 
+                    ? 'bg-red-100 border-red-300 text-red-700 hover:bg-red-200' 
+                    : 'bg-slate-100 border-slate-300 text-slate-700 hover:bg-slate-200'
+                }`}
               >
-                Invisible
+                {isInvisible ? 'Visible' : 'Invisible'}
               </Button>
             </div>
 
             <div className="flex-1 px-6 pb-6 overflow-hidden">
-              <div className="space-y-4 h-full overflow-y-auto">
-                {conversationHistory.map((message) => (
-                  <div key={message.id} className={`flex gap-3 ${message.isUser ? '' : 'flex-row-reverse'}`}>
-                    <div className={`w-10 h-10 rounded-full flex-shrink-0 flex items-center justify-center shadow-md ${
-                      message.isUser 
-                        ? 'bg-gradient-to-r from-blue-500 to-blue-600' 
-                        : 'bg-gradient-to-r from-green-500 to-green-600'
-                    }`}>
-                      <span className="text-white text-sm font-bold">
-                        {message.isUser ? 'U' : 'AI'}
-                      </span>
-                    </div>
-                    <div className="flex-1 min-w-0">
-                      <div className={`text-sm font-semibold text-slate-700 mb-1 ${
-                        message.isUser ? '' : 'text-right'
-                      }`}>
-                        {message.isUser ? 'User' : 'Models'}
-                      </div>
-                      <div className={`rounded-lg p-4 text-slate-700 text-sm shadow-sm ${
+              {!isInvisible ? (
+                <div className="space-y-4 h-full overflow-y-auto">
+                  {conversationHistory.map((message) => (
+                    <div key={message.id} className={`flex gap-3 ${message.isUser ? '' : 'flex-row-reverse'}`}>
+                      <div className={`w-10 h-10 rounded-full flex-shrink-0 flex items-center justify-center shadow-md ${
                         message.isUser 
-                          ? 'bg-blue-50 border border-blue-100' 
-                          : 'bg-green-50 border border-green-100'
+                          ? 'bg-gradient-to-r from-blue-500 to-blue-600' 
+                          : 'bg-gradient-to-r from-green-500 to-green-600'
                       }`}>
-                        {message.content}
+                        <span className="text-white text-sm font-bold">
+                          {message.isUser ? 'U' : 'AI'}
+                        </span>
+                      </div>
+                      <div className="flex-1 min-w-0 px-2">
+                        <div className={`text-sm font-semibold text-slate-700 mb-1 ${
+                          message.isUser ? '' : 'text-right'
+                        }`}>
+                          {message.isUser ? 'User' : 'Models'}
+                        </div>
+                        <div 
+                          className={`rounded-lg p-4 max-w-full text-slate-700 text-sm shadow-sm cursor-pointer transition-all duration-200 ${
+                            message.isUser 
+                              ? 'bg-blue-50 border border-blue-100 hover:bg-blue-100 hover:border-blue-200' 
+                              : 'bg-green-50 border border-green-100'
+                          } ${selectedMessageId === message.id ? 'ring-2 ring-blue-500' : ''}`}
+                          onClick={() => handleMessageClick(message.id, message.isUser)}
+                        >
+                          {message.content}
+                        </div>
                       </div>
                     </div>
+                  ))}
+                </div>
+              ) : (
+                <div className="flex flex-col items-center justify-center h-full text-slate-400">
+                  <div className="w-16 h-16 bg-slate-100 rounded-full flex items-center justify-center mb-4">
+                    <svg className="w-8 h-8 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13.875 18.825A10.05 10.05 0 0112 19c-4.478 0-8.268-2.943-9.543-7a9.97 9.97 0 011.563-3.029m5.858.908a3 3 0 114.243 4.243M9.878 9.878l4.242 4.242M9.878 9.878L3 3m6.878 6.878L21 21" />
+                    </svg>
                   </div>
-                ))}
-              </div>
+                  <div className="text-lg font-semibold mb-2">非表示モード</div>
+                  <div className="text-sm text-slate-500">メッセージが非表示になっています</div>
+                </div>
+              )}
             </div>
           </div>
 
           {/* English Skill-Up Report */}
           <div className="flex-1 bg-white rounded-xl shadow-lg border border-slate-200 flex flex-col min-w-0">
             <div className="flex items-center gap-3 p-6 pb-4 flex-shrink-0">
-              <h2 className="text-2xl font-bold text-slate-800">English Skill-Up Report</h2>
+              <h2 className="text-2xl font-bold text-slate-800">
+                English Skill-Up Report
+                {selectedMessageId && (
+                  <span className="text-sm font-normal text-slate-500 ml-2">
+                    (Message ID: {selectedMessageId})
+                  </span>
+                )}
+              </h2>
             </div>
 
             <div className="flex-1 px-6 pb-6 overflow-hidden">

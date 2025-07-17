@@ -14,11 +14,35 @@ export interface WebpageResponse {
   };
 }
 
+export interface Transcription {
+  id: number;
+  content: string;
+}
+
+export interface Response {
+  id: number;
+  content: string;
+}
+
 export interface AudioResponse {
-  transcription: string;
-  response: string;
+  transcription: Transcription;
+  response: Response;
   audio_content: string;
 }
+
+export interface AnalysisResult {
+  advice: string;
+  speechflaws: string;
+  nuanceinquiry: string[];
+  alternativeexpressions: [string, string][];
+  suggestion: string;
+}
+
+export interface AnalysisResultResponse {
+  analysis_result: AnalysisResult;
+}
+
+
 
 export class AudioService {
   static async createSession(): Promise<SessionResponse> {
@@ -64,6 +88,11 @@ export class AudioService {
       throw new Error(`Failed to process audio: ${response.statusText}`);
     }
 
+    return response.json();
+  }
+
+  static async getAnalysisResult(sessionId: string, conversationId: string): Promise<AnalysisResultResponse> {
+    const response = await fetch(`${API_BASE_URL}/get_analysis_result/${sessionId}/${conversationId}`);
     return response.json();
   }
 } 
