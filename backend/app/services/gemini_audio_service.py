@@ -51,7 +51,7 @@ class GeminiAudioService:
         self.transcript_analysis_prompt = TranscriptAnalysisPrompt()
         self.audio_analysis_prompt = AudioAnalysisPrompt()
 
-    def generate_text(self, audio_content: bytes, session_id: str, session_manager: SessionManagerService):
+    async def generate_text(self, audio_content: bytes, session_id: str, session_manager: SessionManagerService):
         """
         音声データからテキストを生成するメソッド（従来の統合版）
         
@@ -70,7 +70,7 @@ class GeminiAudioService:
             raise ValueError("Empty audio data")
         
         try:
-            history = session_manager.get_history(session_id)
+            history = await session_manager.get_history(session_id)
             print(history)
             # プロンプトの取得
             prompt = self.prompt.format()
@@ -91,14 +91,14 @@ class GeminiAudioService:
             response_json: list[ResponseSchema] = response.parsed
             conversation = [f'"user":{response_json[0].transcription}', 
                             f'"model":{response_json[0].response}']
-            session_manager.add_to_history(session_id, conversation)
+            await session_manager.add_to_history(session_id, conversation)
             return response_json
             
         except Exception as e:
             logger.error(f"Error generating text: {e}")
             raise e
 
-    def generate_immediate_response(self, audio_content: bytes, session_id: str, session_manager: SessionManagerService):
+    async def generate_immediate_response(self, audio_content: bytes, session_id: str, session_manager: SessionManagerService):
         """
         音声データから即座のレスポンス（書き起こしと返事）を生成するメソッド
         
@@ -119,11 +119,11 @@ class GeminiAudioService:
             raise ValueError("Empty audio data")
         
         try:
-            history = session_manager.get_history(session_id)
+            history = await session_manager.get_history(session_id)
             print(history)
             
             # Webページデータがあるかチェック
-            webpage_data = session_manager.get_webpage_data(session_id)
+            webpage_data = await session_manager.get_webpage_data(session_id)
             webpage_context = ""
             if webpage_data:
                 webpage_context = f"\n\nReference Webpage:\nTitle: {webpage_data['title']}\nURL: {webpage_data['url']}\nContent: {webpage_data['content'][:2000]}..."  # 最初の2000文字
@@ -150,7 +150,7 @@ class GeminiAudioService:
             # セッション履歴に追加
             conversation = [f'"user":{response_json[0].transcription}', 
                             f'"model":{response_json[0].response}']
-            session_manager.add_to_history(session_id, conversation)
+            await session_manager.add_to_history(session_id, conversation)
             
             return response_json[0]
             
@@ -216,7 +216,7 @@ class GeminiAudioService:
             analysis_result = await self.generate_transcript_analysis(transcription)
             
             # 分析結果をセッションに保存
-            session_manager.save_analysis_result(
+            await session_manager.save_analysis_result(
                 session_id=session_id,
                 transcription=transcription,
                 analysis_result=analysis_result.dict()
@@ -226,7 +226,7 @@ class GeminiAudioService:
         except Exception as e:
             logger.error(f"Error in background analysis for session {session_id}: {str(e)}")
             # エラーが発生した場合も空の結果を保存
-            session_manager.save_analysis_result(
+            await session_manager.save_analysis_result(
                 session_id=session_id,
                 conversation_id='',
                 transcription=transcription,
@@ -283,7 +283,7 @@ class GeminiAudioService:
             analysis_result = await self.generate_audio_analysis(audio_content)
             
             # 分析結果をセッションに保存
-            session_manager.save_analysis_result(
+            await session_manager.save_analysis_result(
                 session_id=session_id,
                 conversation_id=conversation_id,
                 transcription="",  # 音声分析なので空文字列
@@ -294,14 +294,11 @@ class GeminiAudioService:
         except Exception as e:
             logger.error(f"Error in background analysis for session {session_id}: {str(e)}")
             # エラーが発生した場合も空の結果を保存
-            session_manager.save_analysis_result(
+            await session_manager.save_analysis_result(
                 session_id=session_id,
                 transcription="",
                 analysis_result={
                     "advice": "",
-                    "speechflaws": "",
-                    "nuanceinquiry": [],
-                    "alternativeexpressions": [],
                     "suggestion": ""
                 }
             )

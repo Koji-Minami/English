@@ -1,33 +1,36 @@
 'use client';
 
-import { useState, useRef, useEffect } from 'react';
+import { useState, useEffect, useRef } from "react";
+import { Button } from "@/components/ui/button"
+import { Input } from "@/components/ui/input"
 import { AudioService } from '@/lib/services/api';
 import { AudioRecorder, createAudioUrlFromBase64 } from '@/lib/services/audioRecorder';
 import { useKeyboardControls } from '@/lib/hooks/useKeyboardControls';
 
-export default function Home() {
-  const [isRecording, setIsRecording] = useState(false);
-  const [transcript, setTranscript] = useState('');
-  const [response, setResponse] = useState('');
-  const [sessionId, setSessionId] = useState<string | null>(null);
-  const [audioUrl, setAudioUrl] = useState<string | null>(null);
-  const [isLoading, setIsLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const audioRecorderRef = useRef<AudioRecorder | null>(null);
-  const audioRef = useRef<HTMLAudioElement | null>(null);
-  const [speechFlaws, setSpeechFlaws] = useState('');
-  const [webpageUrl, setWebpageUrl] = useState('');
-  const [isAddingWebpage, setIsAddingWebpage] = useState(false);
-  const [webpageStatus, setWebpageStatus] = useState<string | null>(null);
-  const [conversationId, setConversationId] = useState<number | null>(null);
-  
-  interface NuanceItem {
-    alternative: string;
-    nuance: string;
-  }
-  
-  const [nuanceInquiry, setNuanceInquiry] = useState<NuanceItem | NuanceItem[] | null>(null);
-  const [alternativeExpressions, setAlternativeExpressions] = useState<NuanceItem | NuanceItem[] | null>(null);
+export default function Component() {
+
+    const [url, setUrl] = useState("");
+    const [isLoading, setIsLoading] = useState(false);
+    const [error, setError] = useState<string | null>(null);
+    const [sessionId, setSessionId] = useState<string | null>(null);
+    const [talkHistory, setTalkHistory] = useState(["aaaa","bbbb","cccc","dddd","eeee"]);
+    const [conversationHistory, setConversationHistory] = useState<Array<{id: number, isUser: boolean, content: string}>>([]);
+    const [adviceForExpression, setAdviceForExpression] = useState("");
+    const [alternativeExpressions, setAlternativeExpressions] = useState<string[]>([]);
+    const [usefulIdioms, setUsefulIdioms] = useState<string[]>([]);
+    const [isInvisible, setIsInvisible] = useState(false);
+    const audioRecorderRef = useRef<AudioRecorder | null>(null);
+    const audioRef = useRef<HTMLAudioElement | null>(null);
+    const [audioUrl, setAudioUrl] = useState<string | null>(null);
+    const [isRecording, setIsRecording] = useState(false);
+    const [webpageUrl, setWebpageUrl] = useState('');
+    const [isAddingWebpage, setIsAddingWebpage] = useState(false);
+    const [webpageStatus, setWebpageStatus] = useState<string | null>(null);
+    const [transcript, setTranscript] = useState<string>('');
+    const [response, setResponse] = useState<string>('');
+    const [analysisResults, setAnalysisResults] = useState<{[key: string]: any}>({});
+    const [selectedMessageId, setSelectedMessageId] = useState<number | null>(null);
+    
 
   // 音声URLが変更されたら自動再生
   useEffect(() => {
@@ -107,8 +110,19 @@ export default function Home() {
 
       const data = await AudioService.processAudio(sessionId, audioBlob);
       
-      setTranscript(data.transcription);
-      setResponse(data.response);
+      setTranscript(data.transcription.content);
+      setResponse(data.response.content);
+      setConversationHistory([...conversationHistory, {
+        id: data.transcription.id,
+        isUser: true,
+        content: data.transcription.content,
+      },{
+        id: data.response.id,
+        isUser: false,
+        content: data.response.content,
+      }]);
+      console.log(conversationHistory);
+      
 
       // 音声データをBase64からBlobに変換
       try {
@@ -137,175 +151,253 @@ export default function Home() {
     onStopRecording: stopRecording,
   });
 
+  const deleteSession = async () => {
+    try {
+      console.log("delete session");
+      setSessionId(null);
+      setWebpageStatus(null); // セッション作成時にステータスをリセット
+      setConversationHistory([]);
+      setAnalysisResults({});
+      setSelectedMessageId(null);
+    } catch (error) {
+      console.error('Error deleting session:', error);
+      setError('セッションの削除に失敗しました');
+    }
+  };
+
+  const handleMessageClick = async (messageId: number, isUser: boolean) => {
+    if (!isUser || !sessionId) return;
+    
+    try {
+      setSelectedMessageId(messageId);
+      console.log(messageId);
+      const result = await AudioService.getAnalysisResult(sessionId, messageId.toString());
+      console.log(result);
+      
+      // 分析結果を保存
+      setAnalysisResults(result);
+      
+      // 分析結果を表示用のstateに設定
+      setAdviceForExpression(result.analysis_result.advice || '');
+      setAlternativeExpressions(
+        result.analysis_result.alternativeexpressions?.map((expr: [string, string]) => expr[0]) || []
+      );
+      setUsefulIdioms(
+        result.analysis_result.suggestion || []
+      );
+    } catch (error) {
+      console.error('Error getting analysis result:', error);
+      setError('分析結果の取得に失敗しました');
+    }
+  };
+
+  const toggleInvisibleMode = () => {
+    setIsInvisible(!isInvisible);
+  };
+
   return (
-    <main className="min-h-screen p-8">
-      <div className="max-w-2xl mx-auto">
-        <h1 className="text-3xl font-bold mb-8">Speech to Text</h1>
-        
-        {error && (
-          <div className="mb-4 p-4 bg-red-100 border border-red-400 text-red-700 rounded">
-            {error}
-            <button
-              onClick={() => setError(null)}
-              className="ml-2 text-red-500 hover:text-red-700"
-            >
-              ✕
-            </button>
-          </div>
-        )}
-        
+    <div className="flex h-screen bg-gradient-to-br from-slate-100 via-blue-50 to-indigo-100 overflow-hidden">
+      {/* 音声要素（非表示） */}
+      <audio ref={audioRef} src={audioUrl || undefined} controls className="hidden"/>
+      {/* 左サイドバー */}
+      <div className="w-48 bg-gradient-to-b from-slate-800 to-slate-900 p-4 shadow-xl flex-shrink-0">
         <div className="mb-8">
-          <h2 className="text-lg font-semibold mb-2">Session ID: {sessionId || 'Not created'}</h2>
-          <button
-            onClick={createSession}
-            className={`px-6 py-3 rounded-full font-semibold ${
-              sessionId
-                ? 'bg-red-500 hover:bg-red-600'
-                : 'bg-blue-500 hover:bg-blue-600'
-            } text-white transition-colors`}
-          >
-            {sessionId ? 'Now Conversation' : 'Start Conversation'}
-          </button>
-          <button
-            onClick={createSession}
-            className={`px-6 py-3 rounded-full font-semibold ${
-              sessionId
-                ? 'bg-red-500 hover:bg-red-600'
-                : 'disabled:'
-            } text-white transition-colors`}
-          >
-            "finish conversation"
-          </button>
-          
-          {/* WebページURL入力フォーム */}
-          {sessionId && (
-            <div className="mt-6 p-4 bg-gray-50 rounded-lg">
-              <h3 className="text-lg font-semibold mb-3">📄 会話の題材を追加</h3>
-              <div className="flex gap-2 mb-3">
-                <input
-                  type="url"
-                  value={webpageUrl}
-                  onChange={(e) => setWebpageUrl(e.target.value)}
-                  placeholder="https://example.com/article"
-                  className="flex-1 px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-                  disabled={isAddingWebpage}
-                />
-                <button
-                  onClick={addWebpageToSession}
-                  disabled={!webpageUrl.trim() || isAddingWebpage}
-                  className={`px-4 py-2 rounded-md font-semibold ${
-                    !webpageUrl.trim() || isAddingWebpage
-                      ? 'bg-gray-300 cursor-not-allowed'
-                      : 'bg-green-500 hover:bg-green-600 text-white'
-                  } transition-colors`}
-                >
-                  {isAddingWebpage ? '追加中...' : '追加'}
-                </button>
+          <h2 className="text-lg font-bold text-white mb-4 flex items-center gap-2">
+            <div className="w-6 h-6 bg-gradient-to-r from-blue-400 to-blue-600 rounded-full"></div>
+            Talk History
+          </h2>
+          <div className="space-y-2">
+            {talkHistory.map((_, i) => (
+              <div
+                key={i}
+                className="text-slate-300 text-sm hover:text-white hover:bg-slate-700 p-2 rounded-lg cursor-pointer transition-all duration-200"
+              >
+                {_}
               </div>
-              {webpageStatus && (
-                <div className={`text-sm ${
-                  webpageStatus.includes('✅') ? 'text-green-600' : 
-                  webpageStatus.includes('❌') ? 'text-red-600' : 
-                  'text-blue-600'
-                }`}>
-                  {webpageStatus}
-                </div>
-              )}
-              <p className="text-xs text-gray-500 mt-2">
-                Webページの内容を参考にした会話ができるようになります
-              </p>
-            </div>
-          )}
-          
-          <div className="mt-4 text-center">
-            <p className="text-gray-600">
-              {sessionId 
-                ? 'スペースキーを押している間だけ録音します'
-                : '会話を開始してください'}
-            </p>
-            {isRecording && (
-              <div className="mt-2 text-red-500 font-semibold animate-pulse">
-                録音中...
-              </div>
-            )}
+            ))}
           </div>
         </div>
 
-        {transcript && (
-          <div className="bg-white p-6 rounded-lg shadow-md">
-            <h2 className="text-xl font-semibold mb-4">Transcription:</h2>
-            <p className="text-gray-700">{transcript}</p>
-            <h2 className="text-xl font-semibold mb-4">Response:</h2>
-            <p className="text-gray-700">{response}</p>
-            {/* <h2 className="text-xl font-semibold mb-4">Speech Flaws:</h2>
-            <p className="text-gray-700">{speechFlaws}</p>
-            <h2 className="text-xl font-semibold mb-4">Nuance Inquiry:</h2>
-            <ul className="list-disc pl-5 text-gray-700">
-              {nuanceInquiry && (Array.isArray(nuanceInquiry) ? (
-                nuanceInquiry.map((item, index) => (
-                  <li key={index}>
-                    {typeof item === 'object' ? (
-                      <>
-                        <div>Alternative: {item.alternative}</div>
-                        <div>Nuance: {item.nuance}</div>
-                      </>
-                    ) : (
-                      item
-                    )}
-                  </li>
-                ))
-              ) : (
-                <li>
-                  {typeof nuanceInquiry === 'object' ? (
-                    <>
-                      <div>Alternative: {nuanceInquiry.alternative}</div>
-                      <div>Nuance: {nuanceInquiry.nuance}</div>
-                    </>
-                  ) : (
-                    JSON.stringify(nuanceInquiry)
-                  )}
-                </li>
-              ))}
-            </ul> */}
-            {/* <h2 className="text-xl font-semibold mb-4">Alternative Expressions:</h2>
-            <ul className="list-disc pl-5 text-gray-700">
-              {alternativeExpressions && (Array.isArray(alternativeExpressions) ? (
-                alternativeExpressions.map((item, index) => (
-                  <li key={index}>
-                    {typeof item === 'object' ? (
-                      <>
-                        <div>Alternative: {item.alternative}</div>
-                        <div>Nuance: {item.nuance}</div>
-                      </>
-                    ) : (
-                      item
-                    )}
-                  </li>
-                ))
-              ) : (
-                <li>
-                  {typeof alternativeExpressions === 'object' ? (
-                    <>
-                      <div>Alternative: {alternativeExpressions.alternative}</div>
-                      <div>Nuance: {alternativeExpressions.nuance}</div>
-                    </>
-                  ) : (
-                    JSON.stringify(alternativeExpressions)
-                  )}
-                </li>
-              ))}
-            </ul> */}
-            {audioUrl && (
-              <audio
-                ref={audioRef}
-                src={audioUrl}
-                controls
-                className="mt-4 w-full"
-              />
-            )}
-          </div>
-        )}
+        <div className="border-t border-slate-600 pt-4">
+          <h3 className="text-base font-bold text-white flex items-center gap-2">
+            <div className="w-5 h-5 bg-gradient-to-r from-green-400 to-green-600 rounded-full"></div>
+            Words Test
+          </h3>
+        </div>
       </div>
-    </main>
-  );
+
+      {/* メインエリア */}
+      <div className="flex-1 flex flex-col p-6 min-w-0">
+        {/* ヘッダー部分 */}
+        <div className="flex-shrink-0 mb-6">
+          <h1 className="text-3xl font-bold text-slate-800 mb-4 bg-gradient-to-r from-blue-600 to-purple-600 bg-clip-text text-transparent">
+            Talk Theme: Lorem ipsum dolor sit amet, consectetur
+          </h1>
+
+          {/* セッション開始ボタン */}
+          <div className="mb-4 flex gap-3">
+            <Button 
+              onClick={createSession}
+              disabled={isLoading}
+              className="bg-gradient-to-r from-green-500 to-green-600 hover:from-green-600 hover:to-green-700 text-white shadow-lg hover:shadow-xl transition-all duration-200"
+            >
+              {sessionId ? `ID:${sessionId}` : 'セッションを開始'}
+            </Button>
+            <Button 
+              onClick={deleteSession}
+              disabled={isLoading}
+              className={`bg-gradient-to-r from-red-500 to-red-600 hover:from-red-600 hover:to-red-700 text-white shadow-lg hover:shadow-xl transition-all duration-200 ${sessionId ? '' : 'hidden'}`}
+            >
+              {`finish session`}
+            </Button>
+
+          </div>
+
+          <div className="flex gap-3">
+              <div className="flex items-center gap-2 bg-white rounded-lg p-3 shadow-md border border-slate-200">
+                <span className="text-slate-700 text-sm font-medium">URL:</span>
+                <Input
+                  value={webpageUrl}
+                  onChange={(e) => setWebpageUrl(e.target.value)}
+                  placeholder="URLを入力してください"
+                  className="w-64 border-slate-300 focus:border-blue-500 focus:ring-blue-500"
+                />
+              </div>
+              <Button 
+                onClick={addWebpageToSession}
+                disabled={!sessionId || isAddingWebpage}
+                className="bg-gradient-to-r from-blue-500 to-blue-600 hover:from-blue-600 hover:to-blue-700 text-white shadow-lg hover:shadow-xl transition-all duration-200"
+              >
+                {isAddingWebpage ? '追加中...' : 'Upload'}
+              </Button>
+            </div>
+            {webpageStatus && (
+              <div className="mt-2 text-sm text-blue-600">
+                {webpageStatus}
+              </div>
+            )}
+
+        </div>
+
+        {/* 2つのウィンドウを並べる部分 - 残りの高さを全て使用 */}
+        <div className="flex gap-6 flex-1 min-h-0">
+          {/* Conversations History */}
+          <div className="flex-1 bg-white rounded-xl shadow-lg border border-slate-200 flex flex-col min-w-0">
+            <div className="flex items-center gap-3 p-6 pb-4 flex-shrink-0">
+              <h2 className="text-2xl font-bold text-slate-800">Conversations History</h2>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={toggleInvisibleMode}
+                className={`transition-colors duration-200 ${
+                  isInvisible 
+                    ? 'bg-red-100 border-red-300 text-red-700 hover:bg-red-200' 
+                    : 'bg-slate-100 border-slate-300 text-slate-700 hover:bg-slate-200'
+                }`}
+              >
+                {isInvisible ? 'Visible' : 'Invisible'}
+              </Button>
+            </div>
+
+            <div className="flex-1 px-6 pb-6 overflow-hidden">
+              {!isInvisible ? (
+                <div className="space-y-4 h-full overflow-y-auto">
+                  {conversationHistory.map((message) => (
+                    <div key={message.id} className={`flex gap-3 ${message.isUser ? '' : 'flex-row-reverse'}`}>
+                      <div className={`w-10 h-10 rounded-full flex-shrink-0 flex items-center justify-center shadow-md ${
+                        message.isUser 
+                          ? 'bg-gradient-to-r from-blue-500 to-blue-600' 
+                          : 'bg-gradient-to-r from-green-500 to-green-600'
+                      }`}>
+                        <span className="text-white text-sm font-bold">
+                          {message.isUser ? 'U' : 'AI'}
+                        </span>
+                      </div>
+                      <div className="flex-1 min-w-0 px-2">
+                        <div className={`text-sm font-semibold text-slate-700 mb-1 ${
+                          message.isUser ? '' : 'text-right'
+                        }`}>
+                          {message.isUser ? 'User' : 'Models'}
+                        </div>
+                        <div 
+                          className={`rounded-lg p-4 max-w-full text-slate-700 text-sm shadow-sm cursor-pointer transition-all duration-200 ${
+                            message.isUser 
+                              ? 'bg-blue-50 border border-blue-100 hover:bg-blue-100 hover:border-blue-200' 
+                              : 'bg-green-50 border border-green-100'
+                          } ${selectedMessageId === message.id ? 'ring-2 ring-blue-500' : ''}`}
+                          onClick={() => handleMessageClick(message.id, message.isUser)}
+                        >
+                          {message.content}
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <div className="flex flex-col items-center justify-center h-full text-slate-400">
+                  <div className="w-16 h-16 bg-slate-100 rounded-full flex items-center justify-center mb-4">
+                    <svg className="w-8 h-8 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13.875 18.825A10.05 10.05 0 0112 19c-4.478 0-8.268-2.943-9.543-7a9.97 9.97 0 011.563-3.029m5.858.908a3 3 0 114.243 4.243M9.878 9.878l4.242 4.242M9.878 9.878L3 3m6.878 6.878L21 21" />
+                    </svg>
+                  </div>
+                  <div className="text-lg font-semibold mb-2">非表示モード</div>
+                  <div className="text-sm text-slate-500">メッセージが非表示になっています</div>
+                </div>
+              )}
+            </div>
+          </div>
+
+          {/* English Skill-Up Report */}
+          <div className="flex-1 bg-white rounded-xl shadow-lg border border-slate-200 flex flex-col min-w-0">
+            <div className="flex items-center gap-3 p-6 pb-4 flex-shrink-0">
+              <h2 className="text-2xl font-bold text-slate-800">
+                English Skill-Up Report
+                {selectedMessageId && (
+                  <span className="text-sm font-normal text-slate-500 ml-2">
+                    (Message ID: {selectedMessageId})
+                  </span>
+                )}
+              </h2>
+            </div>
+
+            <div className="flex-1 px-6 pb-6 overflow-hidden">
+              <div className="space-y-4 h-full overflow-y-auto">
+                {/* Advice for Expression */}
+                <div>
+                  <div className="text-sm font-semibold text-slate-700 mb-2">Advice for Expression</div>
+                  <div className="bg-blue-50 rounded-lg p-4 text-slate-700 text-sm border border-blue-100 shadow-sm">
+                    {adviceForExpression}
+                  </div>
+                </div>
+
+                {/* Alternative Expressions */}
+                <div>
+                  <div className="text-sm font-semibold text-slate-700 mb-2">Alternative Expressions</div>
+                  <div className="bg-green-50 rounded-lg p-4 text-slate-700 text-sm border border-green-100 shadow-sm">
+                    <ul className="space-y-1">
+                      {alternativeExpressions.map((expression) => (
+                        <li key={expression}>{expression}</li>
+                      ))}
+                    </ul>
+                  </div>
+                </div>
+
+                {/* Useful Idioms */}
+                <div>
+                  <div className="text-sm font-semibold text-slate-700 mb-2">Useful Idioms</div>
+                  <div className="bg-purple-50 rounded-lg p-4 text-slate-700 text-sm border border-purple-100 shadow-sm">
+                    <ul className="space-y-1">
+                      {usefulIdioms.map((idiom) => (
+                        <li key={idiom}>{idiom}</li>
+                      ))}
+                    </ul>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  )
 }

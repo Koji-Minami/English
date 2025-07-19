@@ -2,6 +2,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from loguru import logger
 from .api.transcription import router as transcription_router
+from .api.sessions import router as sessions_router
 from .config.settings import Settings, get_settings
 
 def create_app() -> FastAPI:
@@ -23,6 +24,7 @@ def create_app() -> FastAPI:
 
     # ルーターの登録
     app.include_router(transcription_router, prefix="/api/v1")
+    app.include_router(sessions_router, prefix="/api/v1")
 
     @app.on_event("startup")
     async def startup_event():

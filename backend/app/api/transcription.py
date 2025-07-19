@@ -5,7 +5,7 @@ from ..services.speech_service import SpeechService, SpeechServiceFactory
 from ..services.gemini_service import GeminiService, GeminiServiceFactory
 from ..services.gemini_audio_service import GeminiAudioService, GeminiAudioServiceFactory
 from ..services.text2speech_service import TextToSpeechService, TextToSpeechServiceFactory
-from ..services.session_manager import SessionManagerService, SessionManagerServiceFactory
+from ..services.postgres_session_manager import PostgresSessionManagerService, PostgresSessionManagerServiceFactory
 from ..services.web_scraper_service import WebScraperService, WebScraperServiceFactory
 from ..config.settings import Settings, get_settings
 import tempfile
@@ -62,7 +62,7 @@ async def transcribe_audio(
     
 @router.get("/gemini_audio")
 async def create_session(
-    session_manager_service: SessionManagerService = Depends(SessionManagerServiceFactory.create)
+    session_manager_service: PostgresSessionManagerService = Depends(PostgresSessionManagerServiceFactory.create)
 ):
     """
     新しいセッションを作成し、セッションIDを返すエンドポイント
@@ -70,7 +70,7 @@ async def create_session(
     Returns:
         dict: セッションIDを含むレスポンス
     """
-    session_id = session_manager_service.create_session()
+    session_id = await session_manager_service.create_session()
     return {"session_id": session_id}
 
 
@@ -78,7 +78,7 @@ async def create_session(
 async def add_webpage_to_session(
     session_id: str,
     webpage_request: WebpageUrlRequest,
-    session_manager_service: SessionManagerService = Depends(SessionManagerServiceFactory.create),
+    session_manager_service: PostgresSessionManagerService = Depends(PostgresSessionManagerServiceFactory.create),
     web_scraper_service: WebScraperService = Depends(WebScraperServiceFactory.create)
 ):
     """
@@ -87,7 +87,7 @@ async def add_webpage_to_session(
     Args:
         session_id (str): セッションID
         webpage_request (WebpageUrlRequest): WebページURLリクエスト
-        session_manager_service (SessionManagerService): セッション管理サービス
+        session_manager_service (PostgresSessionManagerService): セッション管理サービス
         web_scraper_service (WebScraperService): Webスクレイピングサービス
         
     Returns:
@@ -113,13 +113,13 @@ async def add_webpage_to_session(
             )
         
         # セッションにWebページデータを保存
-        session_manager_service.save_webpage_data(session_id, webpage_data)
+        await session_manager_service.save_webpage_data(session_id, webpage_data)
         
         # 会話履歴にWebページの内容を追加
         webpage_content = f"Webpage: {webpage_data['title']}\nContent: {webpage_data['content']}..."  # 最初の1000文字のみ
         conversation = [f'"user":I have loaded the webpage content. Let\'s discuss about it. # loaded webpage content{webpage_content}']
         print(conversation)
-        session_manager_service.add_to_history(session_id, conversation)
+        await session_manager_service.add_to_history(session_id, conversation)
         logger.info(f"Successfully added webpage content to session: {session_id}, url: {webpage_request.url}")
         
         return {
@@ -150,7 +150,7 @@ async def gemini_audio(
     audio_file: UploadFile = File(...),
     gemini_audio_service: GeminiAudioService = Depends(GeminiAudioServiceFactory.create),
     text_to_speech_service: TextToSpeechService = Depends(TextToSpeechServiceFactory.create),
-    session_manager_service: SessionManagerService = Depends(SessionManagerServiceFactory.create),
+    session_manager_service: PostgresSessionManagerService = Depends(PostgresSessionManagerServiceFactory.create),
     settings: Settings = Depends(get_settings)
 ):
     """
@@ -163,7 +163,7 @@ async def gemini_audio(
         background_tasks (BackgroundTasks): FastAPIのバックグラウンドタスク
         gemini_audio_service (GeminiAudioService): 音声処理サービス
         text_to_speech_service (TextToSpeechService): 音声合成サービス
-        session_manager_service (SessionManagerService): セッション管理サービス
+        session_manager_service (PostgresSessionManagerService): セッション管理サービス
         settings (Settings): アプリケーション設定
         
     Returns:
@@ -181,7 +181,7 @@ async def gemini_audio(
 
         try:
             # 即座のレスポンス（書き起こしと返事）を生成
-            immediate_response = gemini_audio_service.generate_immediate_response(
+            immediate_response = await gemini_audio_service.generate_immediate_response(
                 audio_content=content,
                 session_id=session_id,
                 session_manager=session_manager_service
@@ -195,7 +195,7 @@ async def gemini_audio(
             #     session_manager=session_manager_service
             # )
 
-            current_conversation_id = session_manager_service.get_next_conversation_id(session_id)
+            current_conversation_id = await session_manager_service.get_next_conversation_id(session_id)
             print(f'current_conversation_id: {current_conversation_id}')
             background_tasks.add_task(
                 gemini_audio_service.analyze_audio_background,
@@ -220,7 +220,7 @@ async def gemini_audio(
                     "content": immediate_response.transcription
                 },
                 "response": {
-                    "id": session_manager_service.get_next_conversation_id(session_id),
+                    "id": await session_manager_service.get_next_conversation_id(session_id),
                     "content": immediate_response.response
                 },
                 "audio_content": audio_base64,
@@ -241,7 +241,7 @@ async def gemini_audio(
 @router.get("/analysis/{session_id}")
 async def get_analysis_results(
     session_id: str,
-    session_manager_service: SessionManagerService = Depends(SessionManagerServiceFactory.create),
+    session_manager_service: PostgresSessionManagerService = Depends(PostgresSessionManagerServiceFactory.create),
     conversation_id: str = Query(default="", description="特定の会話ID（指定しない場合は全て取得）")
 ):
     """
@@ -250,7 +250,7 @@ async def get_analysis_results(
     Args:
         session_id (str): セッションID
         transcription (str, optional): 特定の書き起こしテキスト（指定しない場合は全て取得）
-        session_manager_service (SessionManagerService): セッション管理サービス
+        session_manager_service (PostgresSessionManagerService): セッション管理サービス
         
     Returns:
         dict: 文法分析結果を含むレスポンス
@@ -258,7 +258,7 @@ async def get_analysis_results(
     try:
         if conversation_id:
             # 特定の書き起こしテキストの分析結果を取得
-            analysis_result = session_manager_service.get_analysis_result(session_id, conversation_id)
+            analysis_result = await session_manager_service.get_analysis_result(session_id, conversation_id)
             if analysis_result is None:
                 return {
                     "status": "not_found",
@@ -271,7 +271,7 @@ async def get_analysis_results(
         else:
             # セッションの全ての分析結果を取得
             return {"status": "error", "message": "Conversation ID is required"}
-            all_results = session_manager_service.get_all_analysis_results(session_id)
+            all_results = await session_manager_service.get_all_analysis_results(session_id)
             return {
                 "status": "completed",
                 "all_analysis_results": all_results
@@ -287,9 +287,9 @@ async def get_analysis_results(
 @router.post("/finish_session/{session_id}")
 async def finish_session(
     session_id: str,
-    session_manager_service: SessionManagerService = Depends(SessionManagerServiceFactory.create)
+    session_manager_service: PostgresSessionManagerService = Depends(PostgresSessionManagerServiceFactory.create)
 ):
-    session_manager_service.delete_session(session_id)
+    await session_manager_service.delete_session(session_id)
     return {"message": "Session finished"}
 
 @router.post("/gemini_audio_legacy/{session_id}")
@@ -298,7 +298,7 @@ async def gemini_audio_legacy(
     audio_file: UploadFile = File(...),
     gemini_audio_service: GeminiAudioService = Depends(GeminiAudioServiceFactory.create),
     text_to_speech_service: TextToSpeechService = Depends(TextToSpeechServiceFactory.create),
-    session_manager_service: SessionManagerService = Depends(SessionManagerServiceFactory.create),
+    session_manager_service: PostgresSessionManagerService = Depends(PostgresSessionManagerServiceFactory.create),
     settings: Settings = Depends(get_settings)
 ):
     """
@@ -310,7 +310,7 @@ async def gemini_audio_legacy(
         audio_file (UploadFile): アップロードされた音声ファイル
         gemini_audio_service (GeminiAudioService): 音声処理サービス
         text_to_speech_service (TextToSpeechService): 音声合成サービス
-        session_manager_service (SessionManagerService): セッション管理サービス
+        session_manager_service (PostgresSessionManagerService): セッション管理サービス
         settings (Settings): アプリケーション設定
         
     Returns:
@@ -328,7 +328,7 @@ async def gemini_audio_legacy(
 
         try:
             # 統合版の処理を実行
-            gemini_response = gemini_audio_service.generate_text(
+            gemini_response = await gemini_audio_service.generate_text(
                 audio_content=content,
                 session_id=session_id,
                 session_manager=session_manager_service
@@ -364,7 +364,7 @@ async def gemini_audio_legacy(
 async def get_analysis_result(
     session_id: str,
     conversation_id: str,
-    session_manager_service: SessionManagerService = Depends(SessionManagerServiceFactory.create)
+    session_manager_service: PostgresSessionManagerService = Depends(PostgresSessionManagerServiceFactory.create)
 ):
-    analysis_result = session_manager_service.get_analysis_result(session_id, conversation_id)
+    analysis_result = await session_manager_service.get_analysis_result(session_id, conversation_id)
     return {"analysis_result": analysis_result}

@@ -20,6 +20,13 @@ class Settings(BaseSettings):
     LANGUAGE_CODE: str = "en-US"
     GEMINI_MODEL_NAME: str = "gemini-2.0-flash"
     GEMINI_API_KEY: str = os.getenv("GEMINI_API_KEY")
+    
+    # Database settings
+    DB_HOST: str = "localhost"
+    DB_PORT: int = 5432
+    DB_NAME: str = "english_db"
+    DB_USER: str = "minamikouji"
+    DB_PASSWORD: str = ""
 
     class Config:
         env_file = ".env"
