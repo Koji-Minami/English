@@ -8,13 +8,14 @@ import { AudioRecorder, createAudioUrlFromBase64 } from '@/lib/services/audioRec
 import { useKeyboardControls } from '@/lib/hooks/useKeyboardControls';
 
 export default function Component() {
-
+    const [userName, setUserName] = useState("");
     const [url, setUrl] = useState("");
     const [isLoading, setIsLoading] = useState(false);
     const [error, setError] = useState<string | null>(null);
     const [sessionId, setSessionId] = useState<string | null>(null);
     const [talkHistory, setTalkHistory] = useState(["aaaa","bbbb","cccc","dddd","eeee"]);
     const [conversationHistory, setConversationHistory] = useState<Array<{id: number, isUser: boolean, content: string}>>([]);
+    const [speechflaws, setSpeechflaws] = useState("");
     const [adviceForExpression, setAdviceForExpression] = useState("");
     const [alternativeExpressions, setAlternativeExpressions] = useState<string[]>([]);
     const [usefulIdioms, setUsefulIdioms] = useState<string[]>([]);
@@ -52,7 +53,7 @@ export default function Component() {
 
   const createSession = async () => {
     try {
-      const data = await AudioService.createSession();
+      const data = await AudioService.createSession(userName);
       setSessionId(data.session_id);
       setWebpageStatus(null); // セッション作成時にステータスをリセット
     } catch (error) {
@@ -151,17 +152,23 @@ export default function Component() {
     onStopRecording: stopRecording,
   });
 
-  const deleteSession = async () => {
+  const finishSession = async () => {
     try {
-      console.log("delete session");
+      console.log("finish session");
       setSessionId(null);
       setWebpageStatus(null); // セッション作成時にステータスをリセット
       setConversationHistory([]);
       setAnalysisResults({});
       setSelectedMessageId(null);
+      setTranscript("");
+      setResponse("");
+      setSpeechflaws("");
+      setAdviceForExpression("");
+      setAlternativeExpressions([]);
+      setUsefulIdioms([]);
     } catch (error) {
-      console.error('Error deleting session:', error);
-      setError('セッションの削除に失敗しました');
+      console.error('Error finishing session:', error);
+      setError('セッションの完了に失敗しました');
     }
   };
 
@@ -179,6 +186,7 @@ export default function Component() {
       
       // 分析結果を表示用のstateに設定
       setAdviceForExpression(result.analysis_result.advice || '');
+      setSpeechflaws(result.analysis_result.speechflaws || '');
       setAlternativeExpressions(
         result.analysis_result.alternativeexpressions?.map((expr: [string, string]) => expr[0]) || []
       );
@@ -199,6 +207,21 @@ export default function Component() {
 
   return (
     <div className="flex h-screen bg-gradient-to-br from-slate-100 via-blue-50 to-indigo-100 overflow-hidden">
+    {!userName && (
+      <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+        <div className="bg-white p-8 rounded-lg shadow-xl text-center">
+          <h2 className="text-2xl font-bold text-slate-800 mb-4">Select User</h2>
+          <div className="flex flex-col gap-4">
+            <Button onClick={() => setUserName("Koji")} className="bg-gradient-to-r from-blue-500 to-blue-600 hover:from-blue-600 hover:to-blue-700 text-white shadow-lg hover:shadow-xl transition-all duration-200">
+              Koji
+            </Button>
+            <Button onClick={() => setUserName("Risa")} className="bg-gradient-to-r from-purple-500 to-purple-600 hover:from-purple-600 hover:to-purple-700 text-white shadow-lg hover:shadow-xl transition-all duration-200">
+              Risa
+            </Button>
+          </div>
+        </div>
+      </div>
+    )}
       {/* 音声要素（非表示） */}
       <audio ref={audioRef} src={audioUrl || undefined} controls className="hidden"/>
       {/* 左サイドバー */}
@@ -232,6 +255,9 @@ export default function Component() {
       <div className="flex-1 flex flex-col p-6 min-w-0">
         {/* ヘッダー部分 */}
         <div className="flex-shrink-0 mb-6">
+          <h3 className="text-lg font-bold text-slate-800 mb-4 bg-gradient-to-r from-blue-600 to-purple-600 bg-clip-text text-transparent">
+            ようこそ、{userName}さん
+          </h3>
           <h1 className="text-3xl font-bold text-slate-800 mb-4 bg-gradient-to-r from-blue-600 to-purple-600 bg-clip-text text-transparent">
             Talk Theme: Lorem ipsum dolor sit amet, consectetur
           </h1>
@@ -246,7 +272,7 @@ export default function Component() {
               {sessionId ? `ID:${sessionId}` : 'セッションを開始'}
             </Button>
             <Button 
-              onClick={deleteSession}
+              onClick={finishSession}
               disabled={isLoading}
               className={`bg-gradient-to-r from-red-500 to-red-600 hover:from-red-600 hover:to-red-700 text-white shadow-lg hover:shadow-xl transition-all duration-200 ${sessionId ? '' : 'hidden'}`}
             >
@@ -364,10 +390,17 @@ export default function Component() {
 
             <div className="flex-1 px-6 pb-6 overflow-hidden">
               <div className="space-y-4 h-full overflow-y-auto">
+                {/* Speechflows for Expression */}
+                <div>
+                  <div className="text-sm font-semibold text-slate-700 mb-2">Speechflaws</div>
+                  <div className="bg-blue-50 rounded-lg p-4 text-slate-700 text-sm border border-blue-100 shadow-sm">
+                    {speechflaws}
+                  </div>
+                </div>
                 {/* Advice for Expression */}
                 <div>
                   <div className="text-sm font-semibold text-slate-700 mb-2">Advice for Expression</div>
-                  <div className="bg-blue-50 rounded-lg p-4 text-slate-700 text-sm border border-blue-100 shadow-sm">
+                  <div className="bg-orange-50 rounded-lg p-4 text-slate-700 text-sm border border-blue-100 shadow-sm">
                     {adviceForExpression}
                   </div>
                 </div>

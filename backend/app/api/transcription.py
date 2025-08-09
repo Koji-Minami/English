@@ -62,6 +62,7 @@ async def transcribe_audio(
     
 @router.get("/gemini_audio")
 async def create_session(
+    name: str,
     session_manager_service: PostgresSessionManagerService = Depends(PostgresSessionManagerServiceFactory.create)
 ):
     """
@@ -70,7 +71,7 @@ async def create_session(
     Returns:
         dict: セッションIDを含むレスポンス
     """
-    session_id = await session_manager_service.create_session()
+    session_id = await session_manager_service.create_session(name)
     return {"session_id": session_id}
 
 
@@ -202,6 +203,7 @@ async def gemini_audio(
             # 応答用のIDを生成（書き起こしID + 1）
             response_id = str(int(transcription_id) + 1)
             print(f'response_id: {response_id}')
+            print(f"transcription: {immediate_response.transcription}")
             
             # バックグラウンドで文法分析を実行（書き起こしIDを使用）
             background_tasks.add_task(
@@ -277,7 +279,6 @@ async def get_analysis_results(
             }
         else:
             # セッションの全ての分析結果を取得
-            return {"status": "error", "message": "Conversation ID is required"}
             all_results = await session_manager_service.get_all_analysis_results(session_id)
             return {
                 "status": "completed",

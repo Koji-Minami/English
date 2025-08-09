@@ -45,8 +45,8 @@ export interface AnalysisResultResponse {
 
 
 export class AudioService {
-  static async createSession(): Promise<SessionResponse> {
-    const response = await fetch(`${API_BASE_URL}/gemini_audio`, {
+  static async createSession(userName: string): Promise<SessionResponse> {
+    const response = await fetch(`${API_BASE_URL}/gemini_audio?name=${userName}`, {
       method: 'GET',
     });
     console.log(response);

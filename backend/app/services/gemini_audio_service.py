@@ -89,6 +89,9 @@ class GeminiAudioService:
                 }
             )
             response_json: list[ResponseSchema] = response.parsed
+            if not response_json:
+                logger.error("Empty parsed response for generate_text")
+                raise ValueError("Empty parsed response")
             conversation = [f'"user":{response_json[0].transcription}', 
                             f'"model":{response_json[0].response}']
             await session_manager.add_to_history(session_id, conversation)
@@ -149,6 +152,9 @@ class GeminiAudioService:
                 }
             )
             response_json: list[ImmediateResponseSchema] = response.parsed
+            if not response_json:
+                logger.error("Empty parsed response for generate_immediate_response")
+                raise ValueError("Empty parsed response")
             
             # セッション履歴に追加
             conversation = [f'"user":{response_json[0].transcription}', 
@@ -193,6 +199,9 @@ class GeminiAudioService:
                 }
             )
             response_json: list[AnalysisResponseSchema] = response.parsed
+            if not response_json:
+                logger.error("Empty parsed response for generate_transcript_analysis")
+                raise ValueError("Empty parsed response")
             
             return response_json[0]
             
@@ -204,6 +213,7 @@ class GeminiAudioService:
         self,
         transcription: str,
         session_id: str,
+        conversation_id: str,
         session_manager: SessionManagerService
     ):
         """
@@ -221,6 +231,7 @@ class GeminiAudioService:
             # 分析結果をセッションに保存
             await session_manager.save_analysis_result(
                 session_id=session_id,
+                conversation_id=conversation_id,
                 transcription=transcription,
                 analysis_result=analysis_result.dict()
             )
@@ -231,7 +242,7 @@ class GeminiAudioService:
             # エラーが発生した場合も空の結果を保存
             await session_manager.save_analysis_result(
                 session_id=session_id,
-                conversation_id='',
+                conversation_id=conversation_id,
                 transcription=transcription,
                 analysis_result={
                     "speechflaws": "",
@@ -265,7 +276,9 @@ class GeminiAudioService:
                 }
             )
             response_json: list[AudioAnalysisResponseSchema] = response.parsed
-            print(response_json[0])
+            if not response_json:
+                logger.error("Empty parsed response for generate_audio_analysis")
+                raise ValueError("Empty parsed response")
             
             return response_json[0]
             
@@ -299,9 +312,13 @@ class GeminiAudioService:
             # エラーが発生した場合も空の結果を保存
             await session_manager.save_analysis_result(
                 session_id=session_id,
+                conversation_id=conversation_id,
                 transcription="",
                 analysis_result={
                     "advice": "",
+                    "speechflaws": "",
+                    "nuanceinquiry": [],
+                    "alternativeexpressions": [],
                     "suggestion": ""
                 }
             )
