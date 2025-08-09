@@ -183,7 +183,9 @@ export default function Component() {
         result.analysis_result.alternativeexpressions?.map((expr: [string, string]) => expr[0]) || []
       );
       setUsefulIdioms(
-        result.analysis_result.suggestion || []
+        Array.isArray(result.analysis_result.suggestion) 
+          ? result.analysis_result.suggestion 
+          : []
       );
     } catch (error) {
       console.error('Error getting analysis result:', error);

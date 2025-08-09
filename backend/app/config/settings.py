@@ -18,7 +18,7 @@ class Settings(BaseSettings):
     AUDIO_SAMPLE_RATE: int = 48000
     AUDIO_ENCODING: str = "MP3"
     LANGUAGE_CODE: str = "en-US"
-    GEMINI_MODEL_NAME: str = "gemini-2.0-flash"
+    GEMINI_MODEL_NAME: str = "gemini-2.5-flash"
     GEMINI_API_KEY: str = os.getenv("GEMINI_API_KEY")
     
     # Database settings

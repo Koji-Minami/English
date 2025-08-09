@@ -125,8 +125,11 @@ class GeminiAudioService:
             # Webページデータがあるかチェック
             webpage_data = await session_manager.get_webpage_data(session_id)
             webpage_context = ""
-            if webpage_data:
-                webpage_context = f"\n\nReference Webpage:\nTitle: {webpage_data['title']}\nURL: {webpage_data['url']}\nContent: {webpage_data['content'][:2000]}..."  # 最初の2000文字
+            if webpage_data and isinstance(webpage_data, dict):
+                title = webpage_data.get('title', 'Unknown Title')
+                url = webpage_data.get('url', 'Unknown URL')
+                content = webpage_data.get('content', '')
+                webpage_context = f"\n\nReference Webpage:\nTitle: {title}\nURL: {url}\nContent: {content[:2000]}..."  # 最初の2000文字
             
             # プロンプトの取得
             prompt = self.immediate_prompt.format()

@@ -117,7 +117,7 @@ async def add_webpage_to_session(
         
         # 会話履歴にWebページの内容を追加
         webpage_content = f"Webpage: {webpage_data['title']}\nContent: {webpage_data['content']}..."  # 最初の1000文字のみ
-        conversation = [f'"user":I have loaded the webpage content. Let\'s discuss about it. # loaded webpage content{webpage_content}']
+        conversation = [f'"user":I have loaded the webpage content. Let\'s talk about it. If user asks about the content, please tell them the content. # loaded webpage content{webpage_content}']
         print(conversation)
         await session_manager_service.add_to_history(session_id, conversation)
         logger.info(f"Successfully added webpage content to session: {session_id}, url: {webpage_request.url}")
@@ -195,13 +195,20 @@ async def gemini_audio(
             #     session_manager=session_manager_service
             # )
 
-            current_conversation_id = await session_manager_service.get_next_conversation_id(session_id)
-            print(f'current_conversation_id: {current_conversation_id}')
+            # 書き起こし用のIDを生成
+            transcription_id = await session_manager_service.get_next_conversation_id(session_id)
+            print(f'transcription_id: {transcription_id}')
+            
+            # 応答用のIDを生成（書き起こしID + 1）
+            response_id = str(int(transcription_id) + 1)
+            print(f'response_id: {response_id}')
+            
+            # バックグラウンドで文法分析を実行（書き起こしIDを使用）
             background_tasks.add_task(
                 gemini_audio_service.analyze_audio_background,
                 audio_content=content,
                 session_id=session_id,
-                conversation_id=current_conversation_id,
+                conversation_id=transcription_id,
                 session_manager=session_manager_service
             )
 
@@ -216,11 +223,11 @@ async def gemini_audio(
 
             return {
                 "transcription": {
-                    "id": current_conversation_id,
+                    "id": transcription_id,
                     "content": immediate_response.transcription
                 },
                 "response": {
-                    "id": await session_manager_service.get_next_conversation_id(session_id),
+                    "id": response_id,
                     "content": immediate_response.response
                 },
                 "audio_content": audio_base64,

@@ -1,19 +1,45 @@
-from google import genai
+import io
+import logging
+import wave
 import os
+
+from google import genai
+from google.genai import types
+
+
+MODEL_GEMINI_2_5_FLASH_PREVIEW_TTS="gemini-2.5-flash-preview-tts"
+
 from dotenv import load_dotenv
 
 load_dotenv()
 
 client = genai.Client(api_key=os.getenv("GEMINI_API_KEY"))
-chat = client.chats.create(model="gemini-2.0-flash")
 
-response = chat.send_message("I have 2 dogs in my house.")
-print(response.text)
+# Set up the wave file to save the output:
+def wave_file(filename, pcm, channels=1, rate=24000, sample_width=2):
+   with wave.open(filename, "wb") as wf:
+      wf.setnchannels(channels)
+      wf.setsampwidth(sample_width)
+      wf.setframerate(rate)
+      wf.writeframes(pcm)
 
-response = chat.send_message("How many paws are in my house?")
-print(response.text)
-print(chat.get_history())
 
-for message in chat.get_history():
-    print(f'role - {message.role}',end=": ")
-    print(message.parts[0].text)
+response = client.models.generate_content(
+   model="gemini-2.5-flash-preview-tts",
+   contents="Say cheerfully: Have a wonderful day!",
+   config=types.GenerateContentConfig(
+      response_modalities=["AUDIO"],
+      speech_config=types.SpeechConfig(
+         voice_config=types.VoiceConfig(
+            prebuilt_voice_config=types.PrebuiltVoiceConfig(
+               voice_name='Kore',
+            )
+         )
+      ),
+   )
+)
+
+data = response.candidates[0].content.parts[0].inline_data.data
+
+file_name='out.wav'
+wave_file(file_name, data) # Saves the file to current directory
